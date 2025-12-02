@@ -111,7 +111,7 @@ if __name__ == "__main__":
     if not use_subdir:
         print(f"{n_all_images} images found in {scene_path}.")
     else:
-        dir_content = os.listdir(os.path.join(scene_path, "images"))
+        dir_content = os.listdir(os.path.join(scene_path, "image"))
         for content in dir_content:
             if (
                 content.endswith('.jpg') or content.endswith('.png') or content.endswith('.jpeg')
@@ -169,7 +169,7 @@ if __name__ == "__main__":
             else:
                 raise FileNotFoundError(f'Calibration data ({scene_path}/sparse/0/) not found.')
 
-    image_dir = os.path.join(scene_path, "images") if use_subdir else scene_path
+    image_dir = os.path.join(scene_path, "image") if use_subdir else scene_path
     
     # Parameters
     use_all_images = args.use_all_images
