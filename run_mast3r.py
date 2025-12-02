@@ -28,7 +28,7 @@ from dust3r.viz import add_scene_cam, CAM_COLORS, OPENGL, pts3d_to_trimesh, cat_
 from dust3r.demo import get_args_parser as dust3r_get_args_parser
 
 import cv2
-from matcha.dm_utils.dataset_readers import read_intrinsics_binary, read_extrinsics_binary, qvec2rotmat
+from dm_utils.dataset_readers import read_intrinsics_binary, read_extrinsics_binary, qvec2rotmat
 # from colmap.read_write_model import read_cameras_binary, read_images_binary, read_points3D_binary
 from colmap.read_write_model import Camera, Image, Point3D,  write_cameras_binary, write_images_binary, write_points3D_binary, write_points3D_text, rotmat2qvec
 from colmap.read_write_model import write_cameras_text, write_images_text, write_points3D_text
