@@ -198,7 +198,8 @@ def sparse_scene_optimizer(imgs, subsample, imsizes, pps, base_focals, core_dept
                            lr1=0.07, niter1=300, loss1=gamma_loss(1.5),
                            lr2=0.01, niter2=300, loss2=gamma_loss(0.5),
                            lossd=gamma_loss(1.1),
-                           opt_pp=True, opt_depth=True,
+                           opt_pp=True, opt_focal=True, opt_depth=True,
+                           opt_quat=True,opt_tran=True,opt_size=True,
                            schedule=cosine_schedule, depth_mode='add', exp_depth=False,
                            lora_depth=False,  # dict(k=96, gamma=15, min_norm=.5),
                            shared_intrinsics=False,
@@ -211,9 +212,10 @@ def sparse_scene_optimizer(imgs, subsample, imsizes, pps, base_focals, core_dept
     quats = [nn.Parameter(vec0001.clone()) for _ in range(len(imgs))]
     trans = [nn.Parameter(torch.zeros(3, device=device, dtype=dtype)) for _ in range(len(imgs))]
 
-    # initialize
+    # intialize
     ones = torch.ones((len(imgs), 1), device=device, dtype=dtype)
     median_depths = torch.ones(len(imgs), device=device, dtype=dtype)
+    tmp_cam2w = [None] * len(imgs)
     for img in imgs:
         idx = imgs.index(img)
         init_values = init.setdefault(img, {})
@@ -238,13 +240,30 @@ def sparse_scene_optimizer(imgs, subsample, imsizes, pps, base_focals, core_dept
 
         cam2w = init_values.get('cam2w')
         if cam2w is not None:
+            print('intial cam2w:')
+            if idx == 0:
+                print(cam2w)
+
             rot = cam2w[:3, :3].detach()
             cam_center = cam2w[:3, 3].detach()
-            quats[idx].data[:] = roma.rotmat_to_unitquat(rot)
+            #quats[idx].data[:] = roma.rotmat_to_unitquat(rot)
             trans_offset = med_depth * torch.cat((imsizes[idx] / base_focals[idx] * (0.5 - pps[idx]), ones[:1, 0]))
-            trans[idx].data[:] = cam_center + rot @ trans_offset
+            #trans[idx].data[:] = cam_center + rot @ trans_offset
+            tmp_cam2w[idx] = cam2w.detach().clone()
+            tmp_cam2w[idx][:3,3] = cam_center + rot @ trans_offset
             del rot
-            assert False, 'inverse kinematic chain not yet implemented'
+            # assert False, 'inverse kinematic chain not yet implemented' # TODO: check if this commnt out is fine
+
+    if tmp_cam2w[mst[0]] is not None:
+        quats[mst[0]].data[:] = roma.rotmat_to_unitquat(tmp_cam2w[mst[0]][:3,:3])
+        trans[mst[0]].data[:] = tmp_cam2w[mst[0]][:3,3]
+
+        for i, j in mst[1]:
+            Ti = tmp_cam2w[i]
+            Tj = tmp_cam2w[j]
+            Trel = torch.inverse(Ti) @ Tj
+            quats[j].data[:] = roma.rotmat_to_unitquat(Trel[:3,:3])
+            trans[j].data[:] = Trel[:3,3]
 
     # intrinsics parameters
     if shared_intrinsics:
@@ -447,8 +466,9 @@ def sparse_scene_optimizer(imgs, subsample, imsizes, pps, base_focals, core_dept
                 pix_loss = ploss(1 - alpha)
                 optimizer.zero_grad()
                 loss = loss_func(K, w2cam, pts3d, pix_loss) + loss_dust3r_w * loss_dust3r(cam2w, pts3d, lossd)
-                loss.backward()
-                optimizer.step()
+                if loss.grad_fn is not None:
+                    loss.backward()
+                    optimizer.step()
 
                 # make sure the pose remains well optimizable
                 for i in range(len(imgs)):
@@ -470,9 +490,9 @@ def sparse_scene_optimizer(imgs, subsample, imsizes, pps, base_focals, core_dept
         trainable = not (init[img].get('freeze'))
         pps[i].requires_grad_(False)
         log_focals[i].requires_grad_(False)
-        quats[i].requires_grad_(trainable)
-        trans[i].requires_grad_(trainable)
-        log_sizes[i].requires_grad_(trainable)
+        quats[i].requires_grad_(trainable and opt_quat)
+        trans[i].requires_grad_(trainable and opt_tran)
+        log_sizes[i].requires_grad_(trainable and opt_size)
         core_depth[i].requires_grad_(False)
 
     res_coarse = optimize_loop(loss_3d, lr_base=lr1, niter=niter1, pix_loss=loss1)
@@ -484,7 +504,7 @@ def sparse_scene_optimizer(imgs, subsample, imsizes, pps, base_focals, core_dept
             if init[img].get('freeze', 0) >= 1:
                 continue
             pps[i].requires_grad_(bool(opt_pp))
-            log_focals[i].requires_grad_(True)
+            log_focals[i].requires_grad_(bool(opt_focal))
             core_depth[i].requires_grad_(opt_depth)
 
         # refinement with 2d reproj
