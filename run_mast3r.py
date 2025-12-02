@@ -152,7 +152,7 @@ if __name__ == "__main__":
                 src_intrinsics = {}
                 src_extrinsics = {}
                 src_scale_mats = {}
-                for k, img_name in enumerate(np.sort(os.listdir(f'{scene_path}/images'))):
+                for k, img_name in enumerate(np.sort(os.listdir(f'{scene_path}/image'))):
                     scale_mat, world_mat = scale_mats[k], world_mats[k]
                     P = world_mat @ scale_mat
                     P = P[:3, :4]
